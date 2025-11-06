@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import userService from "../services/userServices"; // pastikan path sesuai
+import userService from "../services/userApiClient";
 
 export const useUserStore = create(
   persist(
@@ -8,14 +8,11 @@ export const useUserStore = create(
       currentUser: null,
       error: null,
 
-      // =====================
-      // REGISTER
-      // =====================
       register: async (data) => {
         try {
           const payload = {
             ...data,
-            avatar: data.avatar || "/images/profile.png", // default avatar
+            avatar: data.avatar || "/images/profile.png",
           };
 
           const res = await userService.register(payload);

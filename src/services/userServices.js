@@ -1,42 +1,121 @@
-import axiosClient from "./api"; // pastikan axiosClient sudah set baseURL ke MockAPI
+import db from "../database/databases.js";
+import bcrypt from "bcryptjs";
 
-const userService = {
-  register: (data) => {
-    const payload = {
-      name: data.name,
-      email: data.email,
-      phone: data.phone,
-      password: data.password,
-      avatar: data.avatar || "/images/profile.png", // default avatar
-      createdAt: new Date().toISOString(),
-    };
-    return axiosClient.post("/users", payload);
-  },
-
-  login: async (email, password) => {
-    const res = await axiosClient.get("/users");
-    const user = res.data.find(
-      (u) => u.email === email && u.password === password
+// === GET ALL USERS ===
+export const getAllUsers = () => {
+  return new Promise((resolve, reject) => {
+    db.query(
+      "SELECT id, name, email, phone, avatar FROM users",
+      (err, result) => {
+        if (err) return reject(err);
+        resolve(result);
+      }
     );
-    if (!user) throw new Error("Email atau password salah!");
-    return user;
-  },
-
-  getUsers: () => axiosClient.get("/users"),
-  getUserById: (id) => axiosClient.get(`/users/${id}`),
-
-  updateUser: (id, data) => {
-    const payload = {
-      name: data.name,
-      email: data.email,
-      phone: data.phone,
-      password: data.password,
-      avatar: data.avatar || "/images/profile.png", // update avatar juga
-    };
-    return axiosClient.put(`/users/${id}`, payload);
-  },
-
-  deleteUser: (id) => axiosClient.delete(`/users/${id}`),
+  });
 };
 
-export default userService;
+// === GET USER BY ID ===
+export const getUserById = (id) => {
+  return new Promise((resolve, reject) => {
+    db.query(
+      "SELECT id, name, email, phone, avatar FROM users WHERE id = ?",
+      [id],
+      (err, result) => {
+        if (err) return reject(err);
+        resolve(result[0]);
+      }
+    );
+  });
+};
+
+// === REGISTER USER (CREATE) ===
+export const registerUser = (data) => {
+  return new Promise((resolve, reject) => {
+    const hashedPassword = bcrypt.hashSync(data.password, 10);
+
+    const query = `
+      INSERT INTO users (name, email, phone, password, avatar, createdAt)
+      VALUES (?, ?, ?, ?, ?, NOW())
+    `;
+
+    db.query(
+      query,
+      [
+        data.name,
+        data.email,
+        data.phone,
+        hashedPassword,
+        data.avatar || "/images/profile.png",
+      ],
+      (err, result) => {
+        if (err) return reject(err);
+        resolve({
+          message: "User registered successfully",
+          id: result.insertId,
+        });
+      }
+    );
+  });
+};
+
+// === LOGIN USER ===
+export const loginUser = (email, password) => {
+  return new Promise((resolve, reject) => {
+    db.query("SELECT * FROM users WHERE email = ?", [email], (err, result) => {
+      if (err) return reject(err);
+      if (result.length === 0)
+        return reject(new Error("Email tidak ditemukan!"));
+
+      const user = result[0];
+      const isMatch = bcrypt.compareSync(password, user.password);
+      if (!isMatch) return reject(new Error("Password salah!"));
+
+      resolve({
+        message: "Login berhasil",
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          avatar: user.avatar,
+        },
+      });
+    });
+  });
+};
+
+// === UPDATE USER ===
+export const updateUser = (id, data) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const hashedPassword = data.password
+        ? await bcrypt.hash(data.password, 10)
+        : null;
+      const query = `
+        UPDATE users 
+        SET name = ?, email = ?, phone = ?, avatar = ?, password = COALESCE(?, password)
+        WHERE id = ?
+      `;
+      db.query(
+        query,
+        [data.name, data.email, data.phone, data.avatar, hashedPassword, id],
+        (err) => {
+          if (err) return reject(err);
+          resolve({ message: "User updated successfully" });
+        }
+      );
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
+
+// === DELETE USER ===
+export const deleteUser = (id) => {
+  return new Promise((resolve, reject) => {
+    db.query("DELETE FROM users WHERE id = ?", [id], (err) => {
+      if (err) return reject(err);
+      resolve({ message: "User deleted successfully" });
+    });
+  });
+};
